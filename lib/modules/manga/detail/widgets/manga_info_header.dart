@@ -13,6 +13,7 @@ import 'package:mangayomi/modules/main_view/nav_groups.dart';
 import 'package:mangayomi/modules/manga/detail/providers/state_providers.dart';
 import 'package:mangayomi/modules/manga/detail/widgets/missing_chapters_label.dart';
 import 'package:mangayomi/modules/manga/detail/widgets/detail_explore_sheet.dart';
+import 'package:mangayomi/modules/manga/detail/widgets/detail_recommendation_row.dart';
 import 'package:mangayomi/modules/manga/detail/widgets/detail_genre_chip.dart';
 import 'package:mangayomi/modules/manga/detail/widgets/detail_header_action.dart';
 import 'package:mangayomi/modules/manga/detail/widgets/edit_local_archive_dialog.dart';
@@ -175,6 +176,12 @@ class _MangaInfoHeaderState extends ConsumerState<MangaInfoHeader> {
                             ),
                           ),
                   ),
+                  // Recommendations sit in the info block itself, so they are
+                  // visible the moment the detail page opens instead of being
+                  // buried in the Explore sheet. The row fetches its own data
+                  // and silently disappears when there is nothing to show.
+                  if (!widget.isLocalArchive)
+                    DetailRecommendationRow(manga: widget.manga),
                   const SizedBox(height: ShioriSpace.s16),
                   if (!context.isTablet)
                     Column(

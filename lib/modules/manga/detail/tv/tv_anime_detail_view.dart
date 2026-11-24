@@ -14,6 +14,7 @@ import 'package:mangayomi/modules/manga/detail/providers/update_manga_detail_pro
 import 'package:mangayomi/modules/manga/detail/tv/widgets/tv_detail_episodes_panel.dart';
 import 'package:mangayomi/modules/manga/detail/tv/widgets/tv_detail_left_info.dart';
 import 'package:mangayomi/modules/manga/detail/tv/widgets/tv_detail_top_bar.dart';
+import 'package:mangayomi/modules/manga/detail/widgets/detail_recommendation_row.dart';
 import 'package:mangayomi/modules/manga/detail/widgets/tracking_menu.dart';
 import 'package:mangayomi/modules/more/providers/algorithm_weights_state_provider.dart';
 import 'package:mangayomi/repositories/history_repository.dart';
@@ -203,7 +204,7 @@ class _TvAnimeDetailViewState extends ConsumerState<TvAnimeDetailView> {
                   Expanded(
                     // Screen padding on both sides so nothing hugs the TV edge.
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(48, 0, 48, 48),
+                      padding: const EdgeInsets.fromLTRB(48, 0, 48, 8),
                       child: Row(
                         // Both columns full height and top-aligned.
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -269,6 +270,13 @@ class _TvAnimeDetailViewState extends ConsumerState<TvAnimeDetailView> {
                         ],
                       ),
                     ),
+                  ),
+                  // A full-width recommendations band under the two columns.
+                  // It stays invisible until there is data, so it never leaves
+                  // an empty strip on an outage or a title with no matches.
+                  SizedBox(
+                    width: double.infinity,
+                    child: DetailRecommendationRow(manga: manga),
                   ),
                 ],
               ),
