@@ -6,6 +6,8 @@ import 'package:mangayomi/providers/l10n_providers.dart';
 import 'package:mangayomi/utils/language.dart';
 import 'package:mangayomi/l10n/generated/app_localizations.dart';
 import 'package:mangayomi/utils/platform_utils.dart';
+import 'package:mangayomi/services/custom_subtitle_source_store.dart';
+import 'package:mangayomi/modules/anime/widgets/custom_subtitle_source_editor.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   const PlayerScreen({super.key});
@@ -118,6 +120,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 onChanged: (v) =>
                     ref.read(subtitlesOnByDefaultStateProvider.notifier).set(v),
               ),
+              FutureBuilder<CustomSubtitleSource>(
+                future: CustomSubtitleSourceStore.load(),
+                builder: (context, snapshot) {
+                  final source = snapshot.data ?? const CustomSubtitleSource();
+                  final defaultSources = [
+                    if (source.xunleiEnabled) 'Xunlei',
+                    if (source.subtitleCatEnabled) 'SubtitleCat',
+                    if (source.avSubtitlesEnabled) 'AVSubtitles',
+                  ].join(', ');
+                  return ShioriSettingRow(
+                    title: 'Custom online subtitle search',
+                    subtitle: snapshot.hasError
+                        ? snapshot.error.toString()
+                        : [
+                            if (defaultSources.isNotEmpty)
+                              'Defaults: $defaultSources',
+                            source.enabled
+                                ? 'Custom: ${source.name}'
+                                : 'Custom source off',
+                            'JavSub.ai search available in subtitle search',
+                          ].join(' · '),
+                    onTap: _editCustomSubtitleSource,
+                  );
+                },
+              ),
               ShioriSwitchRow(
                 title: l10n.use_libass,
                 subtitle: l10n.use_libass_info,
@@ -194,5 +221,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _editCustomSubtitleSource() async {
+    final saved = await CustomSubtitleSourceEditor.show(context);
+    if (saved == true && mounted) setState(() {});
   }
 }

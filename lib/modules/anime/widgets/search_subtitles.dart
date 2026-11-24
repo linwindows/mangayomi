@@ -13,6 +13,10 @@ import 'package:mangayomi/providers/storage_provider.dart';
 import 'package:mangayomi/services/fetch_subtitles.dart';
 import 'package:mangayomi/services/http/m_client.dart';
 import 'package:mangayomi/services/http/rhttp/src/model/settings.dart';
+import 'package:mangayomi/services/custom_subtitle_source_store.dart';
+import 'package:mangayomi/modules/anime/widgets/custom_subtitle_source_editor.dart';
+import 'package:mangayomi/services/external_browser.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:mangayomi/utils/log/logger.dart';
 import 'package:path/path.dart' as path;
 
@@ -65,7 +69,52 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
   Future<void> _search() => _run(() async {
     subtitles = null;
     episodes = null;
-    titles = await fetchImdbTitles(_controller.text.trim());
+    final customSource = await CustomSubtitleSourceStore.load();
+    final query = _controller.text.trim();
+    if (isSubtitleVideoCode(query) || customSource.enabled) {
+      final searches = <Future<List<ImdbSubtitle>>>[
+        fetchDefaultSubtitleSources(
+          query: query,
+          xunleiEnabled: customSource.xunleiEnabled,
+          subtitleCatEnabled: customSource.subtitleCatEnabled,
+          avSubtitlesEnabled: customSource.avSubtitlesEnabled,
+        ),
+        if (customSource.enabled)
+          fetchCustomSubtitles(
+            query: query,
+            urlTemplate: customSource.url,
+            sourceName: customSource.name,
+            resultPath: customSource.path,
+          ).then((results) => results ?? const []),
+      ];
+      final errors = <Object>[];
+      final resultSets = await Future.wait(
+        searches.map((search) async {
+          try {
+            return await search;
+          } catch (error) {
+            errors.add(error);
+            return const <ImdbSubtitle>[];
+          }
+        }),
+      );
+      final unique = <String, ImdbSubtitle>{};
+      for (final subtitle in resultSets.expand((results) => results)) {
+        final url = subtitle.url?.toLowerCase();
+        if (url != null && url.isNotEmpty) {
+          unique.putIfAbsent(url, () => subtitle);
+        }
+      }
+      subtitles = unique.values.toList();
+      titles = [];
+      if (subtitles!.isEmpty && errors.isNotEmpty) {
+        throw FormatException(
+          errors.map((error) => error.toString()).join('\n'),
+        );
+      }
+    } else {
+      titles = await fetchImdbTitles(query);
+    }
   });
 
   /// Goes down a level: a title's episodes (or its subtitles when it has
@@ -180,6 +229,34 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
                         ),
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Custom subtitle source',
+                      onPressed: () async {
+                        final saved = await CustomSubtitleSourceEditor.show(
+                          context,
+                          testQuery: _controller.text.trim(),
+                        );
+                        if (saved == true && mounted) await _search();
+                      },
+                      icon: const Icon(Symbols.settings_rounded),
+                    ),
+                    IconButton(
+                      tooltip: 'Search on JavSub.ai',
+                      onPressed: () async {
+                        final query = normalizeSubtitleSearchId(
+                          _controller.text.trim(),
+                        );
+                        if (query.isEmpty) return;
+                        final uri = Uri.https('javsub.ai', '/search', {
+                          'q': query,
+                        });
+                        if (!await ExternalBrowser.open(uri.toString()) &&
+                            context.mounted) {
+                          botToast(context.l10n.error);
+                        }
+                      },
+                      icon: const Icon(Symbols.open_in_new_rounded),
+                    ),
                   ],
                 ),
               ),
@@ -267,6 +344,7 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
   /// download for a local episode.
   Widget _subtitleRow(BuildContext context, ImdbSubtitle subtitle, int index) {
     final meta = [
+      subtitle.source,
       subtitle.displayLang,
       subtitle.format?.toUpperCase(),
       subtitle.encoding,
@@ -282,8 +360,42 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
               icon: const Icon(Symbols.download_rounded),
             )
           : null,
-      onTap: () => Navigator.pop(context, subtitle),
+      onTap: () => _selectSubtitle(subtitle),
     );
+  }
+
+  Future<void> _selectSubtitle(ImdbSubtitle subtitle) async {
+    if (subtitle.source != 'AVSubtitles') {
+      Navigator.pop(context, subtitle);
+      return;
+    }
+
+    try {
+      final bytes = await fetchAvSubtitleFile(subtitle.url!);
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        path.join(directory.path, 'mangayomi_${subtitle.id}.srt'),
+      );
+      await file.create(recursive: true);
+      await file.writeAsBytes(bytes, flush: true);
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        ImdbSubtitle(
+          id: subtitle.id,
+          url: Uri.file(file.path).toString(),
+          format: subtitle.format,
+          encoding: subtitle.encoding,
+          displayLang: subtitle.displayLang,
+          language: subtitle.language,
+          name: subtitle.name,
+          source: subtitle.source,
+          isHearingImpaired: subtitle.isHearingImpaired,
+        ),
+      );
+    } catch (error) {
+      if (mounted) botToast(context.l10n.error_with_message(error));
+    }
   }
 
   Future<void> _downloadSubtitle(int index) async {
@@ -317,17 +429,19 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
         ),
       );
       await subtitleFile.create(recursive: true);
-      final response = await _withRetry(
-        () => client.get(Uri.parse(subtitle.url ?? '')),
-      );
-      if (response.statusCode != 200) {
-        AppLogger.log(
-          'Warning: Failed to download subtitle file: ${subtitle.language}',
-        );
-        return;
-      }
+      final bytes = subtitle.source == 'AVSubtitles'
+          ? await _withRetry(() => fetchAvSubtitleFile(subtitle.url!))
+          : await _withRetry(() async {
+              final response = await client.get(Uri.parse(subtitle.url ?? ''));
+              if (response.statusCode != 200) {
+                throw HttpException(
+                  'Subtitle download returned HTTP ${response.statusCode}',
+                );
+              }
+              return response.bodyBytes;
+            });
       AppLogger.log('Subtitle file downloaded: ${subtitle.language}');
-      await subtitleFile.writeAsBytes(response.bodyBytes);
+      await subtitleFile.writeAsBytes(bytes);
       if (mounted) {
         botToast(context.l10n.finished(""));
       }

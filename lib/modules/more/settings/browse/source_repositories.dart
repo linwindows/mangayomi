@@ -38,8 +38,6 @@ class SourceRepositories extends ConsumerStatefulWidget {
 }
 
 class _SourceRepositoriesState extends ConsumerState<SourceRepositories> {
-  List<Repo> _entries = [];
-  String urlInput = "";
   bool isRefreshing = false;
 
   Future<void> _launchInBrowser(Uri url) async {
@@ -82,7 +80,6 @@ class _SourceRepositoriesState extends ConsumerState<SourceRepositories> {
     final repositories = ref.watch(
       extensionsRepoStateProvider(widget.itemType),
     );
-    _entries = repositories;
     final sourceCounts =
         ref.watch(repoSourceCountsProvider(widget.itemType)).asData?.value ??
         const {};
@@ -237,165 +234,165 @@ class _SourceRepositoriesState extends ConsumerState<SourceRepositories> {
   }
 
   Future<void> _showAddRepoDialog(BuildContext context) async {
-    bool isLoading = false;
-    final controller = TextEditingController();
-    await showDialog(
+    await showDialog<void>(
       context: context,
-      builder: (context) {
-        return SizedBox(
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              final l10n = context.l10n;
-              return ShioriDialog(
-                title: l10n.add_extensions_repo,
-                content: TextFormField(
-                  controller: controller,
-                  // On Android TV, don't autofocus: it instantly pops the
-                  // full-screen leanback keyboard over the dialog before the
-                  // user can even see the Cancel/Add buttons. Let them navigate
-                  // to the field and open the keyboard with select instead.
-                  // Phones keep autofocus for the usual ready-to-type flow.
-                  autofocus: !isTv,
-                  keyboardType: TextInputType.url,
-                  onChanged: (value) => setState(() {}),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return l10n.url_cannot_be_empty;
-                    }
-                    try {
-                      final uri = Uri.parse(value.trim());
-                      if (!uri.isAbsolute ||
-                          (uri.scheme != 'http' && uri.scheme != 'https')) {
-                        return l10n.invalid_url_format;
-                      }
-                      final clean = value.trim().toLowerCase();
-                      final alreadyExists = _entries.any((r) {
-                        final rUrl = r.jsonUrl?.trim().toLowerCase();
-                        if (rUrl == null) return false;
-                        return rUrl == clean ||
-                            rUrl == '$clean/' ||
-                            '$rUrl/' == clean;
-                      });
-                      if (alreadyExists) {
-                        return l10n.repo_already_exists;
-                      }
-                      return null;
-                    } catch (e) {
-                      return l10n.invalid_url_format;
-                    }
-                  },
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: InputDecoration(
-                    labelText: l10n.url,
-                    hintText: l10n.url_must_end_with_dot_json_or_dot_pb,
-                  ),
-                ),
-                actions: [
-                  ShioriButton.quiet(
-                    label: l10n.cancel,
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  StatefulBuilder(
-                    builder: (context, setState) {
-                      final text = controller.text.trim();
-                      final clean = text.toLowerCase();
-                      final alreadyExists = _entries.any((r) {
-                        final rUrl = r.jsonUrl?.trim().toLowerCase();
-                        if (rUrl == null) return false;
-                        return rUrl == clean ||
-                            rUrl == '$clean/' ||
-                            '$rUrl/' == clean;
-                      });
-                      final isValid =
-                          text.isNotEmpty &&
-                          !alreadyExists &&
-                          Uri.tryParse(text)?.isAbsolute == true;
-                      if (isLoading) {
-                        return const Padding(
-                          padding: EdgeInsets.all(ShioriSpace.s8),
-                          child: ShioriLoading.inline(),
-                        );
-                      }
-                      return ShioriButton(
-                        label: l10n.add,
-                        onPressed: !isValid
-                            ? null
-                            : () async {
-                                setState(() => isLoading = true);
-                                try {
-                                  final repoNotifier = ref.read(
-                                    extensionsRepoStateProvider(widget.itemType)
-                                        .notifier,
-                                  );
-                                  final currentRepos = ref.read(
-                                    extensionsRepoStateProvider(
-                                      widget.itemType,
-                                    ),
-                                  );
-                                  final repo = await ref.read(
-                                    getRepoInfosProvider(jsonUrl: text).future,
-                                  );
-                                  if (repo == null) {
-                                    if (context.mounted) {
-                                      setState(() => isLoading = false);
-                                    }
-                                    botToast(l10n.unsupported_repo);
-                                    return;
-                                  }
-                                  final repoUrl = repo.jsonUrl
-                                      ?.trim()
-                                      .toLowerCase();
-                                  final isDuplicate = currentRepos.any((r) {
-                                    final rUrl = r.jsonUrl
-                                        ?.trim()
-                                        .toLowerCase();
-                                    return (rUrl != null &&
-                                            (rUrl == repoUrl ||
-                                                rUrl == clean ||
-                                                rUrl == '$clean/' ||
-                                                '$rUrl/' == clean ||
-                                                (repoUrl != null &&
-                                                    (rUrl == '$repoUrl/' ||
-                                                        '$rUrl/' ==
-                                                            repoUrl)))) ||
-                                        r == repo;
-                                  });
-                                  if (isDuplicate) {
-                                    setState(() => isLoading = false);
-                                    botToast(l10n.repo_already_exists);
-                                    return;
-                                  }
-                                  await repoNotifier.set([
-                                    ...currentRepos,
-                                    repo,
-                                  ]);
-                                  botToast(l10n.repo_added);
-                                } catch (e, s) {
-                                  if (context.mounted) {
-                                    setState(() => isLoading = false);
-                                  }
-                                  toastError(
-                                    e,
-                                    stack: s,
-                                    source: 'sourceRepositories',
-                                  );
-                                  return;
-                                }
-
-                                if (context.mounted) {
-                                  Navigator.pop(context);
-                                }
-                              },
-                      );
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
+      builder: (_) => _AddRepositoryDialog(itemType: widget.itemType),
     );
-    controller.dispose();
+  }
+}
+
+class _AddRepositoryDialog extends ConsumerStatefulWidget {
+  const _AddRepositoryDialog({required this.itemType});
+
+  final ItemType itemType;
+
+  @override
+  ConsumerState<_AddRepositoryDialog> createState() =>
+      _AddRepositoryDialogState();
+}
+
+class _AddRepositoryDialogState extends ConsumerState<_AddRepositoryDialog> {
+  late final TextEditingController _controller;
+  bool _isLoading = false;
+  bool _cancelled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool _containsRepoUrl(List<Repo> repos, String url) {
+    final clean = url.trim().toLowerCase();
+    return repos.any((repo) {
+      final repoUrl = repo.jsonUrl?.trim().toLowerCase();
+      if (repoUrl == null) return false;
+      return repoUrl == clean || repoUrl == '$clean/' || '$repoUrl/' == clean;
+    });
+  }
+
+  Future<void> _addRepository(String text) async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final currentRepos = ref.read(
+        extensionsRepoStateProvider(widget.itemType),
+      );
+      final repo = await ref.read(getRepoInfosProvider(jsonUrl: text).future);
+      if (!mounted || _cancelled) return;
+
+      if (repo == null) {
+        setState(() => _isLoading = false);
+        botToast(context.l10n.unsupported_repo);
+        return;
+      }
+
+      final repoUrl = repo.jsonUrl?.trim().toLowerCase();
+      final clean = text.trim().toLowerCase();
+      final isDuplicate = currentRepos.any((existing) {
+        final existingUrl = existing.jsonUrl?.trim().toLowerCase();
+        return (existingUrl != null &&
+                (existingUrl == repoUrl ||
+                    existingUrl == clean ||
+                    existingUrl == '$clean/' ||
+                    '$existingUrl/' == clean ||
+                    (repoUrl != null &&
+                        (existingUrl == '$repoUrl/' ||
+                            '$existingUrl/' == repoUrl)))) ||
+            existing == repo;
+      });
+      if (isDuplicate) {
+        setState(() => _isLoading = false);
+        botToast(context.l10n.repo_already_exists);
+        return;
+      }
+
+      await ref.read(extensionsRepoStateProvider(widget.itemType).notifier).set(
+        [...currentRepos, repo],
+      );
+      if (!mounted || _cancelled) return;
+
+      botToast(context.l10n.repo_added);
+      Navigator.pop(context);
+    } catch (e, s) {
+      if (!mounted || _cancelled) return;
+      setState(() => _isLoading = false);
+      toastError(e, stack: s, source: 'sourceRepositories');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final repositories = ref.watch(
+      extensionsRepoStateProvider(widget.itemType),
+    );
+    final text = _controller.text.trim();
+    final alreadyExists = _containsRepoUrl(repositories, text);
+    final isValid =
+        text.isNotEmpty &&
+        !alreadyExists &&
+        Uri.tryParse(text)?.isAbsolute == true;
+
+    return ShioriDialog(
+      title: l10n.add_extensions_repo,
+      content: TextFormField(
+        controller: _controller,
+        // On Android TV, don't autofocus: it instantly pops the full-screen
+        // leanback keyboard over the dialog before the user can see its actions.
+        autofocus: !isTv,
+        keyboardType: TextInputType.url,
+        onChanged: (_) => setState(() {}),
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            return l10n.url_cannot_be_empty;
+          }
+          try {
+            final uri = Uri.parse(value.trim());
+            if (!uri.isAbsolute ||
+                (uri.scheme != 'http' && uri.scheme != 'https')) {
+              return l10n.invalid_url_format;
+            }
+            if (_containsRepoUrl(repositories, value)) {
+              return l10n.repo_already_exists;
+            }
+            return null;
+          } catch (e) {
+            return l10n.invalid_url_format;
+          }
+        },
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        decoration: InputDecoration(
+          labelText: l10n.url,
+          hintText: l10n.url_must_end_with_dot_json_or_dot_pb,
+        ),
+      ),
+      actions: [
+        ShioriButton.quiet(
+          label: l10n.cancel,
+          onPressed: () {
+            _cancelled = true;
+            Navigator.pop(context);
+          },
+        ),
+        if (_isLoading)
+          const Padding(
+            padding: EdgeInsets.all(ShioriSpace.s8),
+            child: ShioriLoading.inline(),
+          )
+        else
+          ShioriButton(
+            label: l10n.add,
+            onPressed: isValid ? () => _addRepository(text) : null,
+          ),
+      ],
+    );
   }
 }
