@@ -25,6 +25,25 @@ import 'package:path/path.dart' as path;
 String subtitleSearchCacheKey(Chapter chapter) =>
     '${chapter.id ?? ''}|${chapter.url ?? ''}|${chapter.name ?? ''}';
 
+final RegExp _javCodeInTitle = RegExp(
+  r'(?<![A-Za-z0-9])([A-Za-z]{2,6})[-_\s]?(\d{2,5})(?![0-9])',
+);
+
+/// Extracts a JAV-style code (e.g. `SSNI-123`) from a title, normalized to
+/// upper case with a hyphen. Returns null when the title holds no code.
+String? extractJavCode(String? title) {
+  if (title == null) return null;
+  final m = _javCodeInTitle.firstMatch(title);
+  if (m == null) return null;
+  return '${m.group(1)!.toUpperCase()}-${m.group(2)}';
+}
+
+/// Default subtitle query: just the code when the title contains one.
+String subtitleDefaultQuery(String? title) {
+  final name = title?.trim() ?? '';
+  return extractJavCode(name) ?? name;
+}
+
 class SubtitlesWidgetSearch extends ConsumerStatefulWidget {
   final Chapter chapter;
   final bool isLocal;
@@ -44,7 +63,7 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
   late final _controller = TextEditingController(
     text: _notifier.snapshot().query.isNotEmpty
         ? _notifier.snapshot().query
-        : widget.chapter.manga.value?.name?.trim() ?? '',
+        : subtitleDefaultQuery(widget.chapter.manga.value?.name),
   );
 
   /// The notifier is captured once: it lives in the app-wide container, so an
