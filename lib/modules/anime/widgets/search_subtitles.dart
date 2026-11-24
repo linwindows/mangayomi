@@ -14,11 +14,16 @@ import 'package:mangayomi/services/fetch_subtitles.dart';
 import 'package:mangayomi/services/http/m_client.dart';
 import 'package:mangayomi/services/http/rhttp/src/model/settings.dart';
 import 'package:mangayomi/services/custom_subtitle_source_store.dart';
+import 'package:mangayomi/modules/anime/providers/subtitle_search_state_provider.dart';
 import 'package:mangayomi/modules/anime/widgets/custom_subtitle_source_editor.dart';
 import 'package:mangayomi/services/external_browser.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:mangayomi/utils/log/logger.dart';
 import 'package:path/path.dart' as path;
+
+/// A stable identity for a chapter's cached search, across sheet closes.
+String subtitleSearchCacheKey(Chapter chapter) =>
+    '${chapter.id ?? ''}|${chapter.url ?? ''}|${chapter.name ?? ''}';
 
 class SubtitlesWidgetSearch extends ConsumerStatefulWidget {
   final Chapter chapter;
@@ -35,40 +40,59 @@ class SubtitlesWidgetSearch extends ConsumerStatefulWidget {
 }
 
 class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
+  late final String _cacheKey = subtitleSearchCacheKey(widget.chapter);
   late final _controller = TextEditingController(
-    text: widget.chapter.manga.value?.name?.trim() ?? "",
+    text: _notifier.snapshot().query.isNotEmpty
+        ? _notifier.snapshot().query
+        : widget.chapter.manga.value?.name?.trim() ?? '',
   );
-  List<ImdbTitle> titles = [];
-  List<ImdbEpisode>? episodes;
-  List<ImdbSubtitle>? subtitles;
-  bool _isLoading = true;
-  String? _errorMsg;
+
+  /// The notifier is captured once: it lives in the app-wide container, so an
+  /// in-flight search can still write its result after the sheet is dismissed
+  /// (a `ref.read` from a disposed widget would throw).
+  late final SubtitleSearchStateNotifier _notifier =
+      ref.read(subtitleSearchStateProvider(_cacheKey).notifier);
+
+  /// The state for this chapter, owned by the provider so it survives the
+  /// sheet being dismissed. Reads and writes both go through it.
+  SubtitleSearchState get _state => _notifier.snapshot();
+
+  void _update(SubtitleSearchState Function(SubtitleSearchState) change) =>
+      _notifier.update(change);
 
   @override
   initState() {
     super.initState();
-    // After the first frame, so the sheet is up before the network is.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _search());
+    // Only the very first open searches on its own. A reopen restores the
+    // last result set, so dismissing the sheet no longer loses the search.
+    if (!_state.searched) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _search());
+    }
   }
 
   /// Runs [load] behind the loading state, and shows its failure if any.
   Future<void> _run(Future<void> Function() load) async {
-    setState(() {
-      _isLoading = true;
-      _errorMsg = null;
-    });
+    _update((s) => s.copyWith(isLoading: true, clearError: true));
     try {
       await load();
     } catch (e) {
-      _errorMsg = e.toString();
+      _update((s) => s.copyWith(errorMsg: e.toString()));
     }
-    if (mounted) setState(() => _isLoading = false);
+    // Clear loading even if the sheet was dismissed mid-search, otherwise the
+    // next open would show a spinner that never resolves.
+    _update((s) => s.copyWith(isLoading: false));
   }
 
-  /// Searches the titles again, from the field.
+  /// Searches the titles again, from the field. This is the only path that
+  /// clears the previous results — a mere close/reopen never does.
   Future<void> _search() => _run(() async {
-    subtitles = null;
-    episodes = null;
+    _update(
+      (s) => s.copyWith(
+        clearSubtitles: true,
+        clearEpisodes: true,
+        titles: const [],
+      ),
+    );
     final customSource = await CustomSubtitleSourceStore.load();
     final query = _controller.text.trim();
     if (isSubtitleVideoCode(query) || customSource.enabled) {
@@ -105,40 +129,45 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
           unique.putIfAbsent(url, () => subtitle);
         }
       }
-      subtitles = unique.values.toList();
-      titles = [];
-      if (subtitles!.isEmpty && errors.isNotEmpty) {
+      final found = unique.values.toList();
+      _update((s) => s.copyWith(subtitles: found, titles: const []));
+      if (found.isEmpty && errors.isNotEmpty) {
         throw FormatException(
           errors.map((error) => error.toString()).join('\n'),
         );
       }
     } else {
-      titles = await fetchImdbTitles(query);
+      final found = await fetchImdbTitles(query);
+      _update((s) => s.copyWith(titles: found));
     }
+    _update((s) => s.copyWith(query: query, searched: true));
   });
 
   /// Goes down a level: a title's episodes (or its subtitles when it has
   /// none), an episode's subtitles.
   Future<void> _open(int index) => _run(() async {
-    if (episodes != null) {
-      subtitles = await fetchImdbSubtitles(episodes![index].id);
+    final state = _state;
+    if (state.episodes != null) {
+      final found = await fetchImdbSubtitles(state.episodes![index].id);
+      _update((s) => s.copyWith(subtitles: found));
     } else {
-      episodes = await fetchImdbEpisodes(titles[index].id);
-      if (episodes == null || episodes!.isEmpty) {
-        subtitles = await fetchImdbSubtitles(titles[index].id);
-      }
+      final episodes = await fetchImdbEpisodes(state.titles[index].id);
+      final found =
+          episodes == null || episodes.isEmpty
+          ? await fetchImdbSubtitles(state.titles[index].id)
+          : null;
+      _update((s) => s.copyWith(episodes: episodes, subtitles: found));
     }
   });
 
   /// Back up a level, to the episodes or the titles.
-  void _back() => setState(() {
-    _errorMsg = null;
-    if (subtitles != null) {
-      subtitles = null;
-    } else {
-      episodes = null;
-    }
-  });
+  void _back() => _update(
+    (s) => s.copyWith(
+      clearError: true,
+      clearSubtitles: s.subtitles != null,
+      clearEpisodes: s.subtitles == null,
+    ),
+  );
 
   @override
   void dispose() {
@@ -148,14 +177,17 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch so restoring a cached search rebuilds the sheet immediately.
+    final state = ref.watch(subtitleSearchStateProvider(_cacheKey));
     final l10n = context.l10n;
     final media = MediaQuery.of(context);
-    final count = subtitles?.length ?? episodes?.length ?? titles.length;
+    final count =
+        state.subtitles?.length ?? state.episodes?.length ?? state.titles.length;
     final Widget body;
-    if (_isLoading) {
+    if (state.isLoading) {
       body = const ShioriLoading();
-    } else if (_errorMsg != null) {
-      body = ErrorState(detail: _errorMsg, onRetry: _search);
+    } else if (state.errorMsg != null) {
+      body = ErrorState(detail: state.errorMsg, onRetry: _search);
     } else if (count == 0) {
       body = ShioriEmptyState(
         icon: Symbols.search_off_rounded,
@@ -167,11 +199,11 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
         shrinkWrap: true,
         padding: const EdgeInsets.only(bottom: ShioriSpace.s16),
         itemCount: count,
-        itemBuilder: (context, index) => subtitles != null
-            ? _subtitleRow(context, subtitles![index], index)
-            : episodes != null
-            ? _episodeRow(context, episodes![index], index)
-            : _titleRow(context, titles[index], index),
+        itemBuilder: (context, index) => state.subtitles != null
+            ? _subtitleRow(context, state.subtitles![index], index)
+            : state.episodes != null
+            ? _episodeRow(context, state.episodes![index], index)
+            : _titleRow(context, state.titles[index], index),
       );
     }
     return Padding(
@@ -199,7 +231,7 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
                 child: Row(
                   spacing: ShioriSpace.s4,
                   children: [
-                    if (subtitles != null || episodes != null)
+                    if (state.subtitles != null || state.episodes != null)
                       IconButton(
                         tooltip: l10n.back_to_results,
                         onPressed: _back,
@@ -401,7 +433,7 @@ class _SubtitlesWidgetSearchState extends ConsumerState<SubtitlesWidgetSearch> {
   Future<void> _downloadSubtitle(int index) async {
     botToast(context.l10n.started);
     try {
-      final subtitle = subtitles![index];
+      final subtitle = _state.subtitles![index];
       final storageProvider = StorageProvider();
       final resolvedArchivePath =
           widget.chapter.archivePath?.isNotEmpty ?? false
