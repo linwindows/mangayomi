@@ -1,18 +1,27 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:mangayomi/modules/manga/detail/widgets/detail_header_action.dart';
-import 'package:shiori/shiori.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:mangayomi/eval/model/m_bridge.dart';
 import 'package:mangayomi/eval/model/m_manga.dart';
+import 'package:mangayomi/l10n/generated/app_localizations.dart';
 import 'package:mangayomi/models/manga.dart';
-import 'package:mangayomi/modules/mass_migration/services/mass_migration_service.dart';
+import 'package:mangayomi/modules/library/library_screen.dart';
 import 'package:mangayomi/modules/library/widgets/category_selection_dialog.dart';
+import 'package:mangayomi/modules/main_view/nav_groups.dart';
+import 'package:mangayomi/modules/manga/detail/manga_detail_view.dart';
+import 'package:mangayomi/modules/manga/detail/providers/state_providers.dart';
+import 'package:mangayomi/modules/manga/detail/widgets/detail_header_action.dart';
+import 'package:mangayomi/modules/manga/detail/widgets/detail_recommendation_row.dart';
+import 'package:mangayomi/modules/widgets/entry_title_tags_widget.dart';
+import 'package:mangayomi/modules/mass_migration/services/mass_migration_service.dart';
 import 'package:mangayomi/providers/l10n_providers.dart';
 import 'package:mangayomi/repositories/category_repository.dart';
 import 'package:mangayomi/repositories/manga_repository.dart';
 import 'package:mangayomi/repositories/source_repository.dart';
 import 'package:mangayomi/services/get_detail.dart';
 import 'package:mangayomi/utils/constant.dart';
-import 'package:mangayomi/modules/manga/detail/manga_detail_view.dart';
+import 'package:mangayomi/utils/utils.dart';
+import 'package:shiori/shiori.dart';
 
 enum _DuplicateLibraryAction { addAnyway, migrate }
 
@@ -182,23 +191,19 @@ class _MangaDetailsViewState extends ConsumerState<MangaDetailsView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: 2,
                 children: [
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: ShioriSpace.s4,
-                    children: [
-                      Icon(
-                        Symbols.person_rounded,
-                        size: iconSize,
-                        color: tokens.color.fgMuted,
-                      ),
-                      Text(
-                        (widget.manga.author?.isEmpty ?? false)
-                            ? l10n.unknown
-                            : widget.manga.author!,
-                        style: tokens.text.row.copyWith(color: tokens.color.fg),
-                      ),
-                    ],
+                  // Subtitle / uncensored markers live in the source URL slug
+                  // (the source strips them from the title), so read them from
+                  // name, genre and link just like the list cards do.
+                  EntryTitleTagsWidget(
+                    title: widget.manga.name,
+                    genre: widget.manga.genre,
+                    link: widget.manga.link,
+                    itemType: widget.manga.itemType,
+                    source: widget.manga.source,
+                    lang: widget.manga.lang,
+                    sourceId: widget.manga.sourceId,
                   ),
+                  _ActorRow(manga: widget.manga, l10n: l10n),
                   Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
                     spacing: ShioriSpace.s4,
@@ -260,6 +265,109 @@ class _MangaDetailsViewState extends ConsumerState<MangaDetailsView> {
         checkForUpdate: widget.checkForUpdate,
         itemType: widget.manga.itemType,
       ),
+    );
+  }
+}
+
+/// The author field holds the cast on video sources. Render each actor as a
+/// tappable label that opens the same library/source search menu as genre
+/// chips, so tapping an actor finds the rest of their work. Multi-value
+/// strings ("赤井彗星, Real Works") are split and cleaned before display.
+class _ActorRow extends ConsumerWidget {
+  const _ActorRow({required this.manga, required this.l10n});
+
+  final Manga manga;
+  final AppLocalizations l10n;
+
+  void _searchActor(BuildContext context, WidgetRef ref, String actor, int value) {
+    if (value == 0) {
+      context.go(
+        libraryRouteFor(manga.itemType),
+        extra: LibrarySearch(actor),
+      );
+      return;
+    }
+
+    final source = getSource(
+      manga.lang ?? '',
+      manga.source ?? '',
+      manga.sourceId,
+    );
+    if (source == null) {
+      botToast(l10n.source_not_added);
+      return;
+    }
+    // Leave the detail page clean for the page we are pushing on top.
+    ref.read(isLongPressedStateProvider.notifier).update(false);
+    ref.read(chaptersListStateProvider.notifier).clear();
+    context.push('/mangaHomeGenre', extra: (source, actor));
+  }
+
+  Widget _actorChip(
+    BuildContext context,
+    WidgetRef ref,
+    String name,
+  ) {
+    final tokens = context.shiori;
+    return MenuAnchor(
+      style: shioriMenuStyle(context),
+      menuChildren: [
+        ShioriMenuEntry(
+          ShioriMenuItem(
+            label: l10n.actor_search_library,
+            icon: Symbols.collections_bookmark_rounded,
+            onSelected: () => _searchActor(context, ref, name, 0),
+          ),
+        ),
+        ShioriMenuEntry(
+          ShioriMenuItem(
+            label: l10n.actor_search_source,
+            icon: Symbols.travel_explore_rounded,
+            onSelected: () => _searchActor(context, ref, name, 1),
+          ),
+        ),
+      ],
+      builder: (context, controller, _) => InkWell(
+        onTap: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 2),
+          child: Text(
+            name,
+            style: tokens.text.row.copyWith(
+              color: tokens.color.fg,
+              decoration: TextDecoration.underline,
+              decorationColor: tokens.color.fgMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.shiori;
+    final actors = splitMetaTerms(manga.author);
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: ShioriSpace.s4,
+      children: [
+        Icon(
+          Symbols.person_rounded,
+          size: tokens.scaled(14),
+          color: tokens.color.fgMuted,
+        ),
+        if (actors.isEmpty)
+          Text(
+            l10n.unknown,
+            style: tokens.text.row.copyWith(color: tokens.color.fg),
+          )
+        else
+          for (final actor in actors) _actorChip(context, ref, actor),
+      ],
     );
   }
 }

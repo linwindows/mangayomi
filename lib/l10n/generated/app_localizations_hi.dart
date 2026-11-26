@@ -2126,6 +2126,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String get genre_search_source => 'स्रोत में ब्राउज़ करें';
 
   @override
+  String get actor_search_library => 'Search actor in library';
+
+  @override
+  String get actor_search_source => 'Search actor in source';
+
+  @override
+  String get tag_search_library => 'Search this tag in library';
+
+  @override
+  String get tag_search_source => 'Search this tag in source';
+
+  @override
   String get source_not_added => 'स्रोत स्थापित नहीं है!';
 
   @override

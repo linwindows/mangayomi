@@ -56,3 +56,6 @@ libisar.dylib
 libisar.so
 isar.dll
 libisar.dll
+
+# WorkBuddy project data (memory, session notes) — local only.
+.workbuddy-ai/

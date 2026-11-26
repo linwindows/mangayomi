@@ -3909,6 +3909,30 @@ abstract class AppLocalizations {
   /// **'Browse in source'**
   String get genre_search_source;
 
+  /// No description provided for @actor_search_library.
+  ///
+  /// In en, this message translates to:
+  /// **'Search actor in library'**
+  String get actor_search_library;
+
+  /// No description provided for @actor_search_source.
+  ///
+  /// In en, this message translates to:
+  /// **'Search actor in source'**
+  String get actor_search_source;
+
+  /// No description provided for @tag_search_library.
+  ///
+  /// In en, this message translates to:
+  /// **'Search this tag in library'**
+  String get tag_search_library;
+
+  /// No description provided for @tag_search_source.
+  ///
+  /// In en, this message translates to:
+  /// **'Search this tag in source'**
+  String get tag_search_source;
+
   /// No description provided for @source_not_added.
   ///
   /// In en, this message translates to:

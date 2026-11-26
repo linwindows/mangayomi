@@ -2080,6 +2080,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get genre_search_source => '소스에서 찾기';
 
   @override
+  String get actor_search_library => 'Search actor in library';
+
+  @override
+  String get actor_search_source => 'Search actor in source';
+
+  @override
+  String get tag_search_library => 'Search this tag in library';
+
+  @override
+  String get tag_search_source => 'Search this tag in source';
+
+  @override
   String get source_not_added => '소스가 설치되지 않았습니다!';
 
   @override

@@ -6,6 +6,7 @@ import 'package:mangayomi/modules/library/widgets/continue_reader_button.dart';
 import 'package:mangayomi/modules/manga/detail/providers/state_providers.dart';
 import 'package:mangayomi/modules/library/widgets/library_entry_utils.dart';
 import 'package:mangayomi/modules/widgets/listview_widget.dart';
+import 'package:mangayomi/modules/widgets/entry_title_tags_widget.dart';
 import 'package:shiori/shiori.dart';
 
 class LibraryListViewWidget extends StatelessWidget {
@@ -93,6 +94,15 @@ class LibraryListViewWidget extends StatelessWidget {
                       ),
                       if (language && (entry.lang?.isNotEmpty ?? false))
                         EntryBadgeChip(label: entry.lang!.toUpperCase()),
+                      EntryTitleTagsWidget(
+                        title: entry.name,
+                        genre: entry.genre,
+                        link: entry.link,
+                        itemType: entry.itemType,
+                        source: entry.source,
+                        lang: entry.lang,
+                        sourceId: entry.sourceId,
+                      ),
                     ],
                   ),
                   if (continueReaderBtn)

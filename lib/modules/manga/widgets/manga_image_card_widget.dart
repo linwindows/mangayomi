@@ -19,6 +19,7 @@ import 'package:mangayomi/utils/constant.dart';
 import 'package:mangayomi/utils/headers.dart';
 import 'package:mangayomi/modules/widgets/bottom_text_widget.dart';
 import 'package:mangayomi/modules/widgets/cover_view_widget.dart';
+import 'package:mangayomi/modules/widgets/entry_title_tags_widget.dart';
 
 class MangaImageCardWidget extends ConsumerWidget {
   final Source source;
@@ -82,6 +83,19 @@ class MangaImageCardWidget extends ConsumerWidget {
             start: ShioriSpace.s4,
             child: InLibraryBadge(),
           ),
+        PositionedDirectional(
+          top: ShioriSpace.s4,
+          end: ShioriSpace.s4,
+          child: EntryTitleTagsWidget(
+            title: getMangaDetail!.name,
+            genre: getMangaDetail!.genre,
+            link: getMangaDetail!.link,
+            itemType: itemType,
+            source: source.name,
+            lang: source.lang,
+            sourceId: source.id,
+          ),
+        ),
         if (!isComfortableGrid)
           BottomTextWidget(
             isTorrent: source.isTorrent,
@@ -207,13 +221,24 @@ class MangaImageCardListTileWidget extends ConsumerWidget {
                 ),
               ),
               Expanded(
-                child: Text(
-                  getMangaDetail!.name!,
-                  maxLines: 2,
-                  style: TextStyle(
-                    overflow: TextOverflow.ellipsis,
-                    color: context.textColor,
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      getMangaDetail!.name!,
+                      maxLines: 2,
+                      style: TextStyle(
+                        overflow: TextOverflow.ellipsis,
+                        color: context.textColor,
+                      ),
+                    ),
+                    EntryTitleTagsWidget(
+                      title: getMangaDetail!.name,
+                      genre: getMangaDetail!.genre,
+                    ),
+                  ],
                 ),
               ),
               if (hasData && libraryManga!.favorite!)

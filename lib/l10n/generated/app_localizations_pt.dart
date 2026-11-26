@@ -2142,6 +2142,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get genre_search_source => 'Explorar na fonte';
 
   @override
+  String get actor_search_library => 'Search actor in library';
+
+  @override
+  String get actor_search_source => 'Search actor in source';
+
+  @override
+  String get tag_search_library => 'Search this tag in library';
+
+  @override
+  String get tag_search_source => 'Search this tag in source';
+
+  @override
   String get source_not_added => 'A fonte não está instalada!';
 
   @override

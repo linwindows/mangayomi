@@ -214,6 +214,12 @@ bool _matchesSearchQuery(Manga manga, String query) {
     (keyword) =>
         (manga.name?.toLowerCase().contains(keyword) ?? false) ||
         (manga.source?.toLowerCase().contains(keyword) ?? false) ||
+        (manga.author?.toLowerCase().contains(keyword) ?? false) ||
+        (manga.artist?.toLowerCase().contains(keyword) ?? false) ||
+        // The subtitle/uncensored tags are encoded in the entry URL slug
+        // (e.g. "/en/abcd-uncensored-leak") and stripped from the title, so
+        // searching for that slug must look at the link too.
+        (manga.link?.toLowerCase().contains(keyword) ?? false) ||
         (manga.genre?.any((g) => g.toLowerCase().contains(keyword)) ?? false),
   );
 }

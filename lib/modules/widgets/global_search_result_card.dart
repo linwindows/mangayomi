@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mangayomi/eval/model/m_manga.dart';
 import 'package:mangayomi/models/source.dart';
 import 'package:mangayomi/modules/widgets/bottom_text_widget.dart';
+import 'package:mangayomi/modules/widgets/entry_title_tags_widget.dart';
 import 'package:mangayomi/modules/widgets/tv_pill.dart';
 import 'package:mangayomi/repositories/manga_repository.dart';
 import 'package:mangayomi/utils/cached_network.dart';
@@ -178,6 +179,19 @@ class _GlobalSearchResultCardState extends ConsumerState<GlobalSearchResultCard>
                         start: ShioriSpace.s4,
                         child: InLibraryBadge(),
                       ),
+                    PositionedDirectional(
+                      top: ShioriSpace.s4,
+                      end: ShioriSpace.s4,
+                      child: EntryTitleTagsWidget(
+                        title: getMangaDetail.name,
+                        genre: getMangaDetail.genre,
+                        link: getMangaDetail.link,
+                        itemType: widget.source.itemType,
+                        source: widget.source.name,
+                        lang: widget.source.lang,
+                        sourceId: widget.source.id,
+                      ),
+                    ),
                   ],
                 );
               },

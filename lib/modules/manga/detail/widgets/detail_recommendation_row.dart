@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:mangayomi/eval/model/m_bridge.dart';
 import 'package:mangayomi/eval/model/m_manga.dart';
 import 'package:mangayomi/eval/model/m_pages.dart';
 import 'package:mangayomi/models/manga.dart';
@@ -140,7 +139,6 @@ Future<List<MManga>> searchSourceRelated(
     return const [];
   }
   var candidates = relatedSearchCandidates(manga);
-  String detailInfo = '未拉详情';
   if (candidates.isEmpty &&
       extractJavCode(name) != null &&
       (manga.link ?? '').isNotEmpty) {
@@ -159,10 +157,7 @@ Future<List<MManga>> searchSourceRelated(
         artist: detail.artist,
         genre: detail.genre,
       );
-      detailInfo = '详情author="${detail.author}" artist="${detail.artist}" '
-          'genre=${detail.genre}';
     } catch (e) {
-      detailInfo = '详情失败:$e';
       if (kDebugMode) debugPrint('[RecRow] getDetail failed: $e');
     }
   }

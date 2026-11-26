@@ -2057,6 +2057,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get genre_search_source => '按类别搜索来源';
 
   @override
+  String get actor_search_library => '在书库中搜索演员';
+
+  @override
+  String get actor_search_source => '在来源中搜索演员';
+
+  @override
+  String get tag_search_library => '在书库中搜索此标签';
+
+  @override
+  String get tag_search_source => '在来源中搜索此标签';
+
+  @override
   String get source_not_added => '来源未添加';
 
   @override

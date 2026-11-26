@@ -11,6 +11,7 @@ import 'package:mangayomi/modules/widgets/bottom_text_widget.dart';
 import 'package:mangayomi/modules/widgets/cover_hero.dart';
 import 'package:mangayomi/modules/widgets/cover_view_widget.dart';
 import 'package:mangayomi/modules/widgets/gridview_widget.dart';
+import 'package:mangayomi/modules/widgets/entry_title_tags_widget.dart';
 import 'package:shiori/shiori.dart';
 
 class LibraryGridViewWidget extends StatefulWidget {
@@ -106,16 +107,31 @@ class _LibraryGridViewWidgetState extends State<LibraryGridViewWidget> {
                             ),
                           ),
 
-                          // ── Top-right: Language ──
-                          if (widget.language &&
-                              (entry.lang?.isNotEmpty ?? false))
-                            PositionedDirectional(
-                              top: ShioriSpace.s4,
-                              end: ShioriSpace.s4,
-                              child: EntryBadgeChip(
-                                label: entry.lang!.toUpperCase(),
-                              ),
+                          // ── Top-right: Language + title-derived tags ──
+                          PositionedDirectional(
+                            top: ShioriSpace.s4,
+                            end: ShioriSpace.s4,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              spacing: 2,
+                              children: [
+                                if (widget.language &&
+                                    (entry.lang?.isNotEmpty ?? false))
+                                  EntryBadgeChip(
+                                    label: entry.lang!.toUpperCase(),
+                                  ),
+                                EntryTitleTagsWidget(
+                                  title: entry.name,
+                                  genre: entry.genre,
+                                  link: entry.link,
+                                  itemType: entry.itemType,
+                                  source: entry.source,
+                                  lang: entry.lang,
+                                  sourceId: entry.sourceId,
+                                ),
+                              ],
                             ),
+                          ),
                         ],
                       ),
 
