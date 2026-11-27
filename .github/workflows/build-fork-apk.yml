@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android:
@@ -105,3 +105,17 @@ jobs:
           name: Mangayomi-fork-${{ github.ref_name }}-${{ github.event.inputs.build_type || 'release' }}
           path: build/app/outputs/flutter-apk/Mangayomi-fork-*.apk
           if-no-files-found: error
+
+      # Tag builds are published as a pre-release so the APKs stay available
+      # on the Releases page (artifacts expire, releases do not). Skipped for
+      # manual workflow_dispatch since that ref is a branch, not a tag.
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            build/app/outputs/flutter-apk/Mangayomi-fork-*.apk \
+            --title "Mangayomi Fork ${{ github.ref_name }}" \
+            --notes "Fork CI build (throwaway signing). Installable release APKs for arm64-v8a / armeabi-v7a / x86_64." \
+            --prerelease
