@@ -1,0 +1,99 @@
+name: Build Fork APK
+
+# Self-contained Android build for this fork. The upstream release workflow
+# depends on signing secrets that a fork does not inherit, so this workflow
+# generates a throwaway debug-signed keystore on the runner and produces an
+# installable release APK as a downloadable artifact. No secrets required.
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        required: true
+        type: choice
+        default: release
+        options:
+          - release
+          - debug
+
+concurrency:
+  group: build-fork-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4.4.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.ref }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Setup Java toolchain
+        uses: actions/setup-java@v4.9.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Generate throwaway signing keystore
+        run: |
+          keytool -genkey -v -keystore android/app/upload-keystore.jks \
+            -alias upload -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass mangayomi -keypass mangayomi \
+            -dname "CN=Fork Build, OU=Dev, O=Fork, L=NA, ST=NA, C=US"
+          cat > android/key.properties <<'EOF'
+          storePassword=mangayomi
+          keyPassword=mangayomi
+          keyAlias=upload
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Setup Gradle properties for CI
+        run: |
+          echo "org.gradle.jvmargs=-Xmx4096M -XX:MaxMetaspaceSize=512m -XX:+UseG1GC" >> android/gradle.properties
+          echo "org.gradle.parallel=true" >> android/gradle.properties
+          echo "org.gradle.daemon=false" >> android/gradle.properties
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Build APK
+        run: |
+          export GRADLE_OPTS="-Xmx4096m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
+          if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
+            flutter build apk --debug --split-per-abi
+          else
+            flutter build apk --release --split-per-abi
+          fi
+
+      - name: Rename artifacts
+        run: |
+          cd build/app/outputs/flutter-apk
+          for f in app-*-release.apk app-*-debug.apk; do
+            [ -e "$f" ] || continue
+            mv "$f" "Mangayomi-fork-${{ github.ref_name }}-$f"
+          done
+          ls -lh *.apk
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: Mangayomi-fork-${{ github.ref_name }}-${{ github.event.inputs.build_type }}
+          path: build/app/outputs/flutter-apk/Mangayomi-fork-*.apk
+          if-no-files-found: error
