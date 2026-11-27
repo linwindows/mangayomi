@@ -295,25 +295,37 @@ Future<void> pushToMangaReaderDetail({
           artist: getManga.artist ?? '',
           sourceId: sourceId,
         );
-    final empty = await mangaRepository.isEmptyByLangNameSource(
-      lang,
-      manga.name,
-      manga.source,
-    );
-    if (empty) {
-      await mangaRepository.save(manga);
-    }
+    // Some sources (e.g. MissAV) strip version markers such as
+    // "-chinese-subtitle" / "-uncensored-leak" out of the displayed title, so
+    // distinct videos of the same work share an identical name and differ
+    // only by link. Match on the link first: falling back to name alone made
+    // every version resolve to the record saved first, so clicking the
+    // subtitle or uncensored search result always reopened the same video.
+    final byLink =
+        manga.link != null
+            ? mangaRepository.findByLinkAndItemType(manga.link!, manga.itemType)
+            : null;
 
-    final foundMangas = await mangaRepository.findAllByLangNameSource(
-      lang,
-      manga.name,
-      manga.source,
-    );
-    Manga? matchedManga;
-    for (final foundManga in foundMangas) {
-      if (foundManga.sourceId == null || foundManga.sourceId == sourceId) {
-        matchedManga = foundManga;
-        break;
+    Manga? matchedManga = byLink;
+    if (matchedManga == null) {
+      final foundMangas = await mangaRepository.findAllByLangNameSource(
+        lang,
+        manga.name,
+        manga.source,
+      );
+      for (final foundManga in foundMangas) {
+        // Only reuse a same-name record when it has no link (legacy entry) or
+        // points at the very same link. Never collapse a different version
+        // into the first matching record.
+        final sameLink =
+            foundManga.link == null ||
+            foundManga.link!.isEmpty ||
+            foundManga.link == manga.link;
+        if (sameLink &&
+            (foundManga.sourceId == null || foundManga.sourceId == sourceId)) {
+          matchedManga = foundManga;
+          break;
+        }
       }
     }
     if (matchedManga == null) {
@@ -356,7 +368,12 @@ Future<void> pushToMangaReaderDetail({
       if (useMaterialRoute) {
         await Navigator.push(
           context,
-          createRoute(page: MangaReaderDetail(mangaId: mangaId)),
+          createRoute(
+            page: MangaReaderDetail(
+              key: ValueKey('mangaDetail-$mangaId'),
+              mangaId: mangaId,
+            ),
+          ),
         );
       } else {
         await context.push('/manga-reader/detail', extra: mangaId);

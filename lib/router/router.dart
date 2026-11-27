@@ -235,7 +235,10 @@ class RouterNotifier extends ChangeNotifier {
     ),
     _genericRoute<int>(
       path: "/manga-reader/detail",
-      builder: (id) => MangaReaderDetail(mangaId: id),
+      // Keyed by manga id so a detail-to-detail push fully remounts instead
+      // of reusing the Element and showing the first opened entry's state.
+      builder: (id) =>
+          MangaReaderDetail(key: ValueKey('mangaDetail-$id'), mangaId: id),
     ),
     _genericRoute<int>(
       name: "mangaReaderView",
